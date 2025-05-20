@@ -100,8 +100,18 @@ secrets:
 - &mysql-8-0-deployment-name mysql-8-0-dev
 - &mysql-8-0-host 10.0.255.10
 
-- &mysql_params_8
+- &mysql_params_80
   MYSQL_HOSTNAME: *mysql-8-0-host
+  MYSQL_CA_CERT: *mysql_ca_cert
+  MYSQL_CLIENT_CERT: *mysql_cert
+  MYSQL_CLIENT_KEY: *mysql_private_key
+  <<: *mysql_common
+
+- &mysql-8-4-deployment-name mysql-8-0-dev
+- &mysql-8-4-host 10.0.255.11
+
+- &mysql_params_84
+  MYSQL_HOSTNAME: *mysql-8-4-host
   MYSQL_CA_CERT: *mysql_ca_cert
   MYSQL_CLIENT_CERT: *mysql_cert
   MYSQL_CLIENT_KEY: *mysql_private_key
@@ -854,6 +864,26 @@ jobs:
     #! It seems that 2 deployments cannot be performed in parallel if they
     #! compile the same release against the same stemcell and therefore BOSH
     #! refuses to grant some locks.
+    - put: mysql-8-4-deployment
+      timeout: 2h
+      params:
+        manifest: backup-and-restore-sdk-release/ci/manifests/mysql.yml
+        stemcells:
+        - jammy-stemcell/*.tgz
+        vars:
+          mysql_version: "8.0"
+          deployment-name: *mysql-8-4-deployment-name
+          db_password: *mysql-password
+          db_host: *mysql-8-4-host
+          availability_zone: z1
+          <<: *mysql_certs_common
+          vm_extensions: ["cf-tcp-router-network-properties"]
+        ops_files:
+        - backup-and-restore-sdk-release/ci/manifests/ops-files/apply_vm_extension.yml
+        source_file: source-file/source-file.yml
+        releases:
+        - bpm-release/*.tgz
+        - pxc-release/*.tgz
     - put: mysql-8-0-deployment
       timeout: 2h
       params:
@@ -962,6 +992,15 @@ jobs:
   - load_var: pooled-env
     file: bosh-env/metadata.yml
   - in_parallel:
+    - task: mysql-8-4-system-tests
+      image: image-cryogenics-essentials
+      file: backup-and-restore-sdk-release/ci/tasks/sdk-system-db/task.yml
+      params:
+        TEST_SUITE_NAME: mysql
+        TEST_TLS_VERIFY_IDENTITY: false
+        TEST_TLS_MUTUAL_TLS: false
+        <<: *bosh-smiths-creds
+        <<: *mysql_params_84
     - task: mysql-8-0-system-tests
       image: image-cryogenics-essentials
       file: backup-and-restore-sdk-release/ci/tasks/sdk-system-db/task.yml
@@ -970,7 +1009,7 @@ jobs:
         TEST_TLS_VERIFY_IDENTITY: false
         TEST_TLS_MUTUAL_TLS: false
         <<: *bosh-smiths-creds
-        <<: *mysql_params_8
+        <<: *mysql_params_80
     - task: mysql-5-7-system-tests
       image: image-cryogenics-essentials
       file: backup-and-restore-sdk-release/ci/tasks/sdk-system-db/task.yml
