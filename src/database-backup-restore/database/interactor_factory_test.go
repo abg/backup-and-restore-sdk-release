@@ -1,17 +1,18 @@
 package database_test
 
 import (
+	"fmt"
+	"os"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
 	"database-backup-restore/config"
 	"database-backup-restore/database"
 	"database-backup-restore/database/fakes"
 	"database-backup-restore/mysql"
 	"database-backup-restore/postgres"
 	"database-backup-restore/version"
-	"fmt"
-	"os"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("InteractorFactory", func() {
@@ -44,6 +45,7 @@ var _ = Describe("InteractorFactory", func() {
 			Mariadb:    config.UtilityPaths{Dump: "mariadb_dump", Restore: "mariadb_restore", Client: "mariadb_client"},
 			Mysql57:    config.UtilityPaths{Dump: "mysql_57_dump", Restore: "mysql_57_restore", Client: "mysql_57_client"},
 			Mysql80:    config.UtilityPaths{Dump: "mysql_80_dump", Restore: "mysql_80_restore", Client: "mysql_80_client"},
+			Mysql84:    config.UtilityPaths{Dump: "mysql_84_dump", Restore: "mysql_84_restore", Client: "mysql_84_client"},
 		}
 	})
 
@@ -224,33 +226,47 @@ var _ = Describe("InteractorFactory", func() {
 					)
 				})
 
-				Context("when MySQL 8 is supported", func() {
-					BeforeEach(func() {
-						tempfile, err := os.CreateTemp("", "fake_mysql_for_bbr_sdk")
-						Expect(err).NotTo(HaveOccurred())
-						utilitiesConfig.Mysql80.Client = tempfile.Name()
-					})
+				It("builds a mysql.Backuper", func() {
+					Expect(factoryError).NotTo(HaveOccurred())
+					Expect(interactor).To(Equal(mysql.NewBackuper(
+						connectionConfig,
+						"mysql_80_dump",
+						mysql.NewDefaultSSLProvider(tempFolderManager),
+						mysql.NewPurgeGTIDOptionProvider(),
+					)))
+				})
+			})
 
-					AfterEach(func() {
-						os.Remove(utilitiesConfig.Mysql80.Client)
-					})
+			Context("when the version is detected as MySQL 8.4.5", func() {
+				BeforeEach(func() {
+					mysqlServerVersionDetector.GetVersionReturns(
+						version.DatabaseServerVersion{
+							Implementation: "mysql",
+							SemanticVersion: version.SemanticVersion{
+								Major: "8",
+								Minor: "4",
+								Patch: "5"}},
+						nil,
+					)
+				})
 
-					It("builds a mysql.Backuper", func() {
-						Expect(factoryError).NotTo(HaveOccurred())
-						Expect(interactor).To(Equal(mysql.NewBackuper(
-							connectionConfig,
-							"mysql_80_dump",
-							mysql.NewDefaultSSLProvider(tempFolderManager),
-							mysql.NewPurgeGTIDOptionProvider(),
-						)))
-					})
+				It("builds a mysql.Backuper", func() {
+					Expect(factoryError).NotTo(HaveOccurred())
+					Expect(interactor).To(Equal(mysql.NewBackuper(
+						connectionConfig,
+						"mysql_84_dump",
+						mysql.NewDefaultSSLProvider(tempFolderManager),
+						mysql.NewPurgeGTIDOptionProvider(),
+					)))
 				})
 			})
 
 			Context("when the version is detected as the not supported MariaDB 5.5.58", func() {
 				BeforeEach(func() {
 					mysqlServerVersionDetector.GetVersionReturns(
-						version.DatabaseServerVersion{"mariadb", version.SemanticVersion{Major: "5", Minor: "5", Patch: "58"}}, nil)
+						version.DatabaseServerVersion{
+							Implementation:  "mariadb",
+							SemanticVersion: version.SemanticVersion{Major: "5", Minor: "5", Patch: "58"}}, nil)
 				})
 
 				It("errors", func() {
@@ -268,8 +284,8 @@ var _ = Describe("InteractorFactory", func() {
 				BeforeEach(func() {
 					mysqlServerVersionDetector.GetVersionReturns(
 						version.DatabaseServerVersion{
-							"mariadb",
-							version.SemanticVersion{Major: "10", Minor: "3"}}, nil)
+							Implementation:  "mariadb",
+							SemanticVersion: version.SemanticVersion{Major: "10", Minor: "3"}}, nil)
 				})
 
 				It("builds a mysql.Restorer", func() {
@@ -285,8 +301,8 @@ var _ = Describe("InteractorFactory", func() {
 				BeforeEach(func() {
 					mysqlServerVersionDetector.GetVersionReturns(
 						version.DatabaseServerVersion{
-							"mysql",
-							version.SemanticVersion{Major: "5", Minor: "7", Patch: "19"}}, nil)
+							Implementation:  "mysql",
+							SemanticVersion: version.SemanticVersion{Major: "5", Minor: "7", Patch: "19"}}, nil)
 				})
 
 				It("builds a mysql.Restorer", func() {
@@ -302,8 +318,8 @@ var _ = Describe("InteractorFactory", func() {
 				BeforeEach(func() {
 					mysqlServerVersionDetector.GetVersionReturns(
 						version.DatabaseServerVersion{
-							"mysql",
-							version.SemanticVersion{Major: "8", Minor: "0", Patch: "27"}}, nil)
+							Implementation:  "mysql",
+							SemanticVersion: version.SemanticVersion{Major: "8", Minor: "0", Patch: "27"}}, nil)
 				})
 
 				Context("when MySQL 8 is supported", func() {
@@ -314,7 +330,7 @@ var _ = Describe("InteractorFactory", func() {
 					})
 
 					AfterEach(func() {
-						os.Remove(utilitiesConfig.Mysql80.Client)
+						_ = os.Remove(utilitiesConfig.Mysql80.Client)
 					})
 
 					It("builds a mysql.Restorer", func() {
@@ -328,12 +344,30 @@ var _ = Describe("InteractorFactory", func() {
 				})
 			})
 
+			Context("when the version is detected as MySQL 8.4.5", func() {
+				BeforeEach(func() {
+					mysqlServerVersionDetector.GetVersionReturns(
+						version.DatabaseServerVersion{
+							Implementation:  "mysql",
+							SemanticVersion: version.SemanticVersion{Major: "8", Minor: "4", Patch: "5"}}, nil)
+				})
+
+				It("builds a mysql.Restorer", func() {
+					Expect(factoryError).NotTo(HaveOccurred())
+					Expect(interactor).To(Equal(mysql.NewRestorer(
+						connectionConfig,
+						"mysql_84_restore",
+						mysql.NewDefaultSSLProvider(tempFolderManager),
+					)))
+				})
+			})
+
 			Context("when the version is detected as the not supported MariaDB 5.5.58", func() {
 				BeforeEach(func() {
 					mysqlServerVersionDetector.GetVersionReturns(
 						version.DatabaseServerVersion{
-							"mariadb",
-							version.SemanticVersion{Major: "5", Minor: "5", Patch: "58"}}, nil)
+							Implementation:  "mariadb",
+							SemanticVersion: version.SemanticVersion{Major: "5", Minor: "5", Patch: "58"}}, nil)
 				})
 
 				It("errors", func() {
