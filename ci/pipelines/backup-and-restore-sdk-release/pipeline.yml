@@ -238,12 +238,20 @@ resources:
     tag_filter: pcre2-([0-9]*.[0-9]*)
     order_by: time
 
-- name: mysql-server-8-blob
+- name: mysql-server-80-blob
   type: ftp
   source:
     url: "https://dev.mysql.com/downloads/mysql/8.0.html?tpl=platform&os=2&version=8.0&osva=#downloads"
     static_download_url_path: "https://dev.mysql.com/get/Downloads/MySQL-8.0/"
     version_regex: "mysql-(?P<version>[0-9]*.[0-9]*.[0-9]*)-linux-glibc.*-x86_64-minimal.tar.xz"
+    filename_mode: true
+
+- name: mysql-server-84-blob
+  type: ftp
+  source:
+    url: "https://dev.mysql.com/downloads/mysql/8.4.html?tpl=platform&os=2&version=8.4&osva=#downloads"
+    static_download_url_path: "https://dev.mysql.com/get/Downloads/MySQL-8.4/"
+    version_regex: "mysql-(?P<version>[0-9]*.[0-9]*.[0-9]*)-linux-glibc2.28-x86_64-minimal.tar.xz"
     filename_mode: true
 
 - name: image-cryogenics-essentials
@@ -1792,12 +1800,12 @@ jobs:
       BLOB_EXTENSION: .tar.gz
       BLOB_DIRECTORY: libpcre2/
       UPDATE_REFERENCES: only-variable-name:LIBPCRE2_VERSION
-  # MySQL 8
-  - task: bump-mysql-8-blob
+  # MySQL 8.0
+  - task: bump-mysql-80-blob
     image: image-cryogenics-essentials
     file: cryogenics-concourse-tasks/deps-automation/bump-blob/task.yml
     input_mapping:
-      distributed-package: mysql-server-8-blob
+      distributed-package: mysql-server-80-blob
       bosh-release: backup-and-restore-sdk-release
     output_mapping:
       bosh-release-updated: backup-and-restore-sdk-release
@@ -1807,10 +1815,29 @@ jobs:
       GIT_EMAIL: *github_email
       GIT_BRANCH: main
       BLOB_NAME: mysql
-      KEEP_BLOBS_FILTER: mysql-5
+      KEEP_BLOBS_FILTER: mysql-5,mysql-8[.]4
       BLOB_EXTENSION: linux-glibc2.17-x86_64-minimal.tar.xz
       BLOB_DIRECTORY: mysql/
       UPDATE_REFERENCES: only-variable-name:MYSQL80_VERSION
+  # MySQL 8.4
+  - task: bump-mysql-84-blob
+    image: image-cryogenics-essentials
+    file: cryogenics-concourse-tasks/deps-automation/bump-blob/task.yml
+    input_mapping:
+      distributed-package: mysql-server-84-blob
+      bosh-release: backup-and-restore-sdk-release
+    output_mapping:
+      bosh-release-updated: backup-and-restore-sdk-release
+    params:
+      <<: *AWS_ACCESS
+      GIT_USERNAME: *github_user
+      GIT_EMAIL: *github_email
+      GIT_BRANCH: main
+      BLOB_NAME: mysql
+      KEEP_BLOBS_FILTER: mysql-5,mysql-8[.]0
+      BLOB_EXTENSION: linux-glibc2.28-x86_64-minimal.tar.xz
+      BLOB_DIRECTORY: mysql/
+      UPDATE_REFERENCES: only-variable-name:MYSQL84_VERSION
   # Push changes
   - put: backup-and-restore-sdk-release-write-only
     params:
